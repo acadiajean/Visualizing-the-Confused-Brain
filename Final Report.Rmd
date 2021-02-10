@@ -1,0 +1,227 @@
+---
+title: "Final Report: Visualizing the Confused Brain"
+author: "Acadia Hegedus and George Valentine"
+date: "12/10/2019"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE,
+                      warning = FALSE, 
+                      message = FALSE)
+```
+Introduction:
+An EEG (electroencephalogram) is a test used by neuroscientists that measures the electrical activity of the brain over time. Raw EEG data is recorded using electrodes that are placed on the scalp, read into a computer as a unit of voltage. Using mathematical techniques, this raw electrical signal is broken down into readings for the different types of frequencies that make up the signal. The frequencies are divided and can be analyzed to see which frequencies correlate with certain behaviors or physical symptoms of a person. These frequencies have been named Delta (1-3 Hz), Theta (4-7 Hz), Alpha (8-11 Hz), Beta (12-29 Hz), and Gamma (30-100 Hz).
+
+The data set we analyzed came from an experiment exploring how confusion displays itself in the brain. It was conducted by Haohan Wang, a Ph.D candidate at Carnegie Mellon University. The data contains the EEG readings of 10 college students as each watched 10 videos. Five of these videos were supposed to confuse them,
+discussing topics such as Quantum Mechanics, and five were supposed to be
+easy to understand, like basic algebra.  
+
+Our primary research question was, what does confusion look like in the brain? How can we visualize the data to compare a confused and non-confused brain at the same time? Furthermore, which frequency can we use to best determine whether a person is feeling confused or not? How are attention and mediation related to confusion level?
+
+```{r}
+library(data.table)
+library(rvest)
+library(stringr)
+library(tidyverse)
+library(tidytext)
+library(ggplot2)
+library(textdata)
+library(lubridate)
+library(gridExtra)
+library(readxl)
+library(ggimage)
+library(rpart)
+library(rattle)
+eeg.data <- read_csv("EEG_data.csv")
+eeg.data.working <- eeg.data
+eeg.data.gathered <- eeg.data %>% 
+  gather(key = "Metric",
+         value = "Value",
+         -SubjectID,
+         -VideoID,
+         -Attention,
+         -Mediation,
+         -Raw,
+         -predefinedlabel,
+         -`user-definedlabeln`)
+eeg.data2 <- eeg.data%>%
+  group_by(VideoID,SubjectID,`user-definedlabeln`)%>%
+  summarize(avg.raw=mean(Raw),
+            avg.delta=mean(Delta),
+            avg.theta=mean(Theta),
+            avg.alpha1=mean(Alpha1),
+            avg.alpha2=mean(Alpha2),
+            avg.beta1=mean(Beta1),
+            avg.beta2=mean(Beta2),
+            avg.gamma1=mean(Gamma1),
+            avg.gamma2=mean(Gamma2),
+            avg.attention=mean(Attention),
+            avg.mediation=mean(Mediation))
+
+#treat user-defined label as factor
+eeg.data2$`user-definedlabeln`<- factor(eeg.data2$`user-definedlabeln`)
+```
+
+Methods: Exploring the data further, EEG readings were taken every half second. The data set has the decomposed frequency at each reading. In addition, the data includes attention and calmness (mediation) values, rated by the researchers. It also includes labels on whether or not the student was supposed to be confused, and whether they themselves felt confused. 
+
+To answer our research questions, we used two distinct techniques. 
+
+The first part was using R Shiny to create an app to visualize the data in an interactive way, pairing EEG scans with the video the participant watched. To visualize what the EEG reading looked like, we filtered the data set by a subject-video pair, gathered it, added time values, and put it into a line graph. All analysis was made using the user-defined label of confusion, on whether or not the subject themself felt confused.
+
+```{r}
+subject0.vid0 <- eeg.data.working %>%
+            filter(SubjectID == 0,
+                   VideoID == 0) %>%
+            mutate(row.number=1:length(.$SubjectID))%>%
+            mutate(time=row.number*0.5) %>% 
+            gather(key = "Metric",
+                   value = "Value",
+                   -SubjectID,
+                   -VideoID,
+                   -Attention,
+                   -Mediation,
+                   -Raw,
+                   -predefinedlabel,
+                   -`user-definedlabeln`,
+                   -row.number,
+                   -time)
+
+subject0.vid0%>%
+            ggplot(aes(x = time,
+                       y = Value)) +
+            geom_line(aes(color = Metric)) + 
+            theme(legend.position = "right") +
+            theme_minimal() +
+            scale_x_continuous(limits = c(0, 75)) +
+            labs(x="Time (in seconds)",y="Volts") +
+            scale_y_continuous(limits=c(0,4000000),
+                               breaks = c(0,1000000,2000000,3000000,4000000),
+                               labels = c(0,1,2,3,4))+
+            ggtitle(paste0("Subject 0 watching a video that they understood, Video 0")) +
+            scale_color_manual(values = c("red",
+                                       "orange",
+                                       "yellow",
+                                       "green",
+                                       "blue",
+                                       "purple",
+                                       "pink",
+                                       "black"))
+```
+
+```{r}
+subject0.vid1 <- eeg.data.working %>%
+            filter(SubjectID == 0,
+                   VideoID == 1) %>%
+            mutate(row.number=1:length(.$SubjectID))%>%
+            mutate(time=row.number*0.5) %>% 
+            gather(key = "Metric",
+                   value = "Value",
+                   -SubjectID,
+                   -VideoID,
+                   -Attention,
+                   -Mediation,
+                   -Raw,
+                   -predefinedlabel,
+                   -`user-definedlabeln`,
+                   -row.number,
+                   -time)
+
+subject0.vid1%>%
+            ggplot(aes(x = time,
+                       y = Value)) +
+            geom_line(aes(color = Metric)) + 
+            theme(legend.position = "right") +
+            theme_minimal() +
+            scale_x_continuous(limits = c(0, 75)) +
+            labs(x="Time (in seconds)",y="Volts") +
+            scale_y_continuous(limits=c(0,4000000),
+                               breaks = c(0,1000000,2000000,3000000,4000000),
+                               labels = c(0,1,2,3,4))+
+            ggtitle(paste0("Subject 0 watching a video that confused them, Video 1")) +
+            scale_color_manual(values = c("red",
+                                       "orange",
+                                       "yellow",
+                                       "green",
+                                       "blue",
+                                       "purple",
+                                       "pink",
+                                       "black"))
+```
+
+Within the Shiny app, we made these EEG line graphs animate based on time. An issue we encountered was scaling the y-axis based on the subject's EEG readings or making it uniform. We decided to make the scale uniform as to best compare the two states; scaling based on values for a certain reading made comparing a confused and understanding reading for a single subject less clear. 
+
+We also included box plots in our app to see if they might show differences in frequency values for different states. 
+
+The second technique we used was regression analysis. A combination of both a decision tree and logistic regression were used to identify the most predictive frequency to whether a person was confused or not. We also used a decision tree to investigate how we could use a subject's attention and calmness level to predict if they were confused.  
+
+Results: 
+
+For the visualization of EEG time series data, see the EEG Scans tab of our shiny app. To see the box plots, see the Predicting the Confused Brain tab.  
+
+How different frequencies are related to confusion using decision trees: 
+
+```{r}
+confusiontree <- rpart(`user-definedlabeln`~avg.delta + avg.theta + avg.alpha1 + avg.alpha2 + avg.beta1 + avg.beta2 + avg.gamma1 + avg.gamma2, 
+               data=eeg.data2)
+
+fancyRpartPlot(confusiontree)
+
+freq.importance.data <- data.frame(Importance=confusiontree$variable.importance, Frequency=c("Theta","Alpha1","Alpha2","Delta","Beta1","Gamma1","Beta2","Gamma2")) #avg.theta value comes out as the most important, followed by avg.alpha1,avg.alpha2
+
+```
+
+
+```{r}
+freq.importance.data%>%
+  ggplot(aes(x = reorder(Frequency, Importance), y=Importance))+
+  geom_bar(aes(fill=Frequency),
+           stat = "identity")+
+  coord_flip()+
+  theme_classic()+
+  labs(title="Frequency Importance When Predicting Confusion")+
+  xlab("Frequency")+
+  theme(legend.position = "none",
+        axis.text = element_text(size = 16),
+        axis.title = element_text(size = 16),
+        plot.title = element_text(hjust = 0.5, size=16, face = "bold"))
+```
+
+Using logistic regression: 
+```{r}
+glm.fit <- glm(`user-definedlabeln` ~ avg.delta + avg.theta + avg.alpha1 + avg.alpha2 + avg.beta1 + avg.beta2 + avg.gamma1 + avg.gamma2, data = eeg.data2, family = binomial)
+summary(glm.fit)
+```
+
+Step-wise regression: 
+```{r}
+step(glm.fit)
+```
+As one can see above in the decision tree, we find that Theta is the most important predictor of whether a person is confused. The Alpha frequencies also have high predictive capability for confusion, however Gamma values do not. Stepwise regression identifies the average Theta value as the most important predictive frequency as well. This frequency alone (without any of the others) builds the best model, with an AIC of 123.8. 
+
+How mediation and attention are related to confusion:
+```{r}
+confusiontree.othervars <- rpart(`user-definedlabeln`~avg.mediation+avg.attention, 
+                                 data=eeg.data2)
+fancyRpartPlot(confusiontree.othervars)
+```
+```{r}
+confusiontree.othervars$variable.importance 
+```
+
+A decision tree of attention and mediation demonstrates that attention plays the most important role in predicting confusion. If the student's attention value is 47 or higher, chances are they are not confused. If it is less than 47, then their mediation (calmness) comes into play.
+
+We then explored which variable was a better predictor, Theta or attention, and found that theta was the best. 
+
+```{r}
+confusiontree.allvars <- rpart(`user-definedlabeln`~avg.attention+avg.theta, 
+                                 data=eeg.data2)
+fancyRpartPlot(confusiontree.allvars)
+```
+```{r}
+confusiontree.allvars$variable.importance 
+```
+
+
+Conclusion:
+We answered our research questions using a combination of data visualization in Shiny and regression analysis. Our primary finding, that Theta frequency is the best predictor of confusion, is in line with past research findings referenced by Haohan Wang on Kaggle. A main takeaway for the reader is that the more attentive one is to learning a subject, the less likely one is to experience confusion. Furthermore, one's level of calmness is not very relevant to determining a confused state. 
